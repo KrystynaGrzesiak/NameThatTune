@@ -64,9 +64,16 @@ ui <- navbarPage("Name That Tune!",
                  ),
                  tabPanel("Summary",
                           h3("Results:"),
-                          tableOutput("overall_results"),
-                          downloadButton("download_scores"),
+                          column(12,
+                                 tableOutput("overall_results"),
+                                 downloadButton("download_scores")),
+                          br(),
+                          br(),
+                          br(),
                           column(3,
+                                 br(),
+                                 br(),
+                                 br(),
                                  checkboxGroupInput("category",
                                                     "Category:",
                                                     choices = c("Author",
@@ -105,7 +112,9 @@ server <- function(input, output, session) {
                 song <- get_my_currently_playing()
                 playlist_id <- str_remove(song$context$uri, "spotify:playlist:")
                 playlist <- get_playlist(playlist_id)
+                print("Settings done!")
                 playlist
+
             })
         }
     })
@@ -170,7 +179,7 @@ server <- function(input, output, session) {
 
     output[["album"]] <- renderText({
         url <- current_song()()$item$album$images$url[1]
-        c('<img src="',url,'" width="150">')
+        c('<img src="',url,'" width="170">')
     })
 
     table_of_scores <- reactiveVal(data.frame())
@@ -255,7 +264,8 @@ server <- function(input, output, session) {
         results <- scores %>%
             select(input[["players"]], category) %>%
             group_by(category) %>%
-            summarise_all(sum)
+            summarise_all(sum) %>%
+            mutate_if(is.numeric, round, digits = 2)
 
         rbind(results, c("SUM:", colSums(results[, -1])))
 
@@ -291,7 +301,8 @@ server <- function(input, output, session) {
     })
 
 
-    output[["download_scores"]] <- downloadHandler(filename = paste0(playlist$name,
+
+    output[["download_scores"]] <- downloadHandler(filename = paste0(playlist()$name,
                                                                      "_scores.csv"),
                                                    content = function(file) {
                                                        write.csv(table_of_scores(), file)
