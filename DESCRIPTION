@@ -9,6 +9,10 @@ Author: Authors@R: c(person(given = "Krystyna",
            person(given = "Józef", 
            family = "Tran", 
            email = "jozeftran@gmail.com", 
+           role = c("ctb")),
+           person(given = "Michal", 
+           family = "Burdukiewicz", 
+           email = "michalburdukiewicz@gmail.com",
            role = c("ctb")))
 Maintainer: Krystyna Grzesiak <krygrz11@gmail.com>
 Description: Provides a fully compatible with Spotify shiny app that allows you 
