@@ -11,7 +11,12 @@ server <- function(input, output, session) {
 
     ###### SETTINGS ############################################################
 
-    token <- get_spotify_authorization_code()
+    scopes <- c("user-read-playback-state",
+                "user-modify-playback-state",
+                "playlist-read-collaborative",
+                "playlist-read-private")
+
+    token <- get_spotify_authorization_code(scope = paste(scopes, collapse = ' '))
 
     ###### DEVICES #############################################################
 
@@ -145,12 +150,11 @@ server <- function(input, output, session) {
         playlist_id <- playlist[["all_ids"]][playlist[["all_names"]] == input[["playlists"]]]
         playlist_info <- get_playlist(playlist_id)
         playlist_tracks <- get_playlist_tracks(playlist_id)
-        albums <- playlist_tracks$track.album.artists
+        albums <- playlist_tracks$track.artists
 
         albums_data <- lapply(1:length(albums), function(i) {
             author <- paste0(albums[[i]]$name, collapse = ", ")
             img <- playlist_tracks$track.album.images[[i]][["url"]][1]
-
             if(is.null(img)) {
                 img <- ""
             }
