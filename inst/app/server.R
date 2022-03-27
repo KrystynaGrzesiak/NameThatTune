@@ -11,7 +11,12 @@ server <- function(input, output, session) {
 
     ###### SETTINGS ############################################################
 
-    token <- get_spotify_authorization_code()
+    scopes <- c("user-read-playback-state",
+                "user-modify-playback-state",
+                "playlist-read-collaborative",
+                "playlist-read-private")
+
+    token <- get_spotify_authorization_code(scope = paste(scopes, collapse = ' '))
 
     ###### DEVICES #############################################################
 
