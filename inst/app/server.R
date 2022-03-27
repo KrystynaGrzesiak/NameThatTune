@@ -5,9 +5,7 @@ library(tidyr)
 library(ggplot2)
 library(stringr)
 library(shinycssloaders)
-library(httr)
 library(shinyjs)
-
 
 server <- function(input, output, session) {
 
