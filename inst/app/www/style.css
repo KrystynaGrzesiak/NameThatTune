@@ -1,0 +1,43 @@
+
+
+body {
+    font-family: "Gill Sans", sans-serif;
+    color: #2D4751;
+}
+
+
+
+.navbar-default {
+    background-color: #faffe8 !important;
+    color: white;
+}
+
+.navbar-nav li a:hover, .navbar-nav > .active > a {
+    color: #ffffff !important;
+    background-color:#1c6e8c !important;
+    background-image: none !important;
+}
+
+
+.navbar-default .navbar-brand {
+    color: #2D4751;
+}
+
+
+h5 {
+    color: black;
+}
+
+
+.shiny-notification {
+             position:fixed;
+             top: calc(20%);
+             left: calc(30%);
+             right: calc(10%);
+             font-size: 40px;
+}
+
+
+
+
+
