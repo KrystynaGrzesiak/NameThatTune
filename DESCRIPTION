@@ -21,8 +21,10 @@ Description: Provides a fully compatible with Spotify shiny app that allows you
 Imports: shiny
 Suggests: dplyr,
           ggplot2,
+          httr,
           shinycssloaders,
           shinyjs,
+          shinyWidgets,
           spotifyr,
           stringr,
           tidyr,

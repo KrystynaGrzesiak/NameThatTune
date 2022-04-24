@@ -5,43 +5,84 @@ library(tidyr)
 library(ggplot2)
 library(stringr)
 library(shinycssloaders)
+library(httr)
 library(shinyjs)
+library(shinyWidgets)
 
 server <- function(input, output, session) {
+
+    disable("left_Start")
+
+    hide("generate")
+    hide("playlist_size")
 
     ###### SETTINGS ############################################################
 
     scopes <- c("user-read-playback-state",
                 "user-modify-playback-state",
                 "playlist-read-collaborative",
-                "playlist-read-private")
+                "playlist-read-private",
+                "user-read-private")
 
     token <- get_spotify_authorization_code(scope = paste(scopes, collapse = ' '))
 
-    ###### DEVICES #############################################################
+    ###### Start ###############################################################
+
+    observeEvent(input[["right_Start"]], {
+        updateTabsetPanel(session = session,
+                          inputId = "general_tab",
+                          selected = "Devices")
+    })
 
     observe({
-        devices <- get_my_devices(authorization = token)
+        user <- get_my_profile(token)
 
+        if(user[["product"]] != "premium") {
+            showNotification(id = "device",
+                             "Premium Spotify account is required!",
+                             type = "error",
+                             closeButton = FALSE,
+                             duration = NULL)
+
+            disable("right_Start")
+        }
+    })
+
+
+    ###### DEVICES #############################################################
+
+    observeEvent(input[["left_Devices"]], {
+        updateTabsetPanel(session = session,
+                          inputId = "general_tab",
+                          selected = "Start")
+    })
+
+    observeEvent(input[["right_Devices"]], {
+        updateTabsetPanel(session = session,
+                          inputId = "general_tab",
+                          selected = "Players")
+    })
+
+    devices_rv <- reactiveValues()
+
+    observe({
+        devices_rv[["info"]] <- get_my_devices(authorization = token)
+        devices <- devices_rv[["info"]]
         active <- devices[["name"]][devices[["is_active"]] == TRUE]
 
-        if(length(active) == 0) {
-            shinyjs::disable(selector = '.navbar-nav a[data-value="Players"')
-            shinyjs::disable(selector = '.navbar-nav a[data-value="Game"')
-            shinyjs::disable(selector = '.navbar-nav a[data-value="Playlist"')
-            shinyjs::disable(selector = '.navbar-nav a[data-value="Summary"')
+        if(length(active) == 0 & input[["general_tab"]] == "Devices") {
             showNotification(id = "device",
-                             "ERROR! There are no available active devices!!!
-                                 Please start Spotify session on the device you
-                                 want to play music on and refresh.",
+                             "No active devices! Please start Spotify
+                             session on the device you want to play music on
+                             and refresh.",
                              type = "error",
                              closeButton = FALSE,
                              duration = NULL)
         } else {
             updateSelectInput(session,
                               "devices",
-                              choices = devices[["name"]],
-                              selected = devices[["name"]][1])
+                              choices = active,
+                              selected = active[1])
             removeNotification("device")
         }
     })
@@ -52,15 +93,10 @@ server <- function(input, output, session) {
         active <- devices[["name"]][devices[["is_active"]] == TRUE]
 
         if(length(active) != 0) {
-            shinyjs::enable(selector = '.navbar-nav a[data-value="Players"')
-            shinyjs::enable(selector = '.navbar-nav a[data-value="Game"')
-            shinyjs::enable(selector = '.navbar-nav a[data-value="Playlist"')
-            shinyjs::enable(selector = '.navbar-nav a[data-value="Summary"')
-
             updateSelectInput(session,
                               "devices",
-                              choices = devices[["name"]],
-                              selected = devices[["name"]][1])
+                              choices = active,
+                              selected = active[1])
             removeNotification("device")
         }
     })
@@ -69,6 +105,19 @@ server <- function(input, output, session) {
     ###### PLAYERS #############################################################
 
     players <- reactiveValues()
+
+
+    observeEvent(input[["left_Players"]], {
+        updateTabsetPanel(session = session,
+                          inputId = "general_tab",
+                          selected = "Devices")
+    })
+
+    observeEvent(input[["right_Players"]], {
+        updateTabsetPanel(session = session,
+                          inputId = "general_tab",
+                          selected = "Playlist")
+    })
 
     observeEvent(input[["n_players"]], {
         if(is.null(input[["n_players"]])) {
@@ -79,28 +128,12 @@ server <- function(input, output, session) {
         players[["n_texts"]] <- number_of_text_inputs
     })
 
-
     output[["text_windows"]] <- renderUI({
         lapply(1L:players[["n_texts"]], function(ith_slider) {
             textInput(inputId = paste0("input_text", ith_slider),
                       label = paste0("Player", ith_slider),
                       value = paste0("Player", ith_slider))
         })
-    })
-
-
-    output[["choice"]] <- renderText({
-        players[["chosen_players"]] <- sapply(1:players[["n_texts"]],
-                                              function(ith_player) {
-                                                  input[[paste0("input_text",
-                                                                ith_player)]]
-                                              })
-
-        text <- paste0("Players: \n\n", paste0("* ",
-                                               players[["chosen_players"]],
-                                               "\n",
-                                               collapse = ""))
-        text
     })
 
     observeEvent(players[["chosen_players"]], {
@@ -128,6 +161,13 @@ server <- function(input, output, session) {
     table_of_scores <- reactiveValues()
     song_index <- reactiveValues()
 
+    observeEvent(input[["left_Playlist"]], {
+        updateTabsetPanel(session = session,
+                          inputId = "general_tab",
+                          selected = "Players")
+    })
+
+
     observe({
         if(is.null(playlist[["all_names"]])) {
             playlist_info <- get_my_playlists(limit = 30,
@@ -145,49 +185,117 @@ server <- function(input, output, session) {
         }
     })
 
-    output[["playlist_content"]] <- renderTable({
 
-        playlist_id <- playlist[["all_ids"]][playlist[["all_names"]] == input[["playlists"]]]
-        playlist_info <- get_playlist(playlist_id)
-        playlist_tracks <- get_playlist_tracks(playlist_id)
-        albums <- playlist_tracks$track.artists
+    observeEvent(input[["refresh_playlist"]], {
+        playlist_info <- get_my_playlists(limit = 30,
+                                          authorization = token)
+        names <- playlist_info[["name"]]
 
-        albums_data <- lapply(1:length(albums), function(i) {
-            author <- paste0(albums[[i]]$name, collapse = ", ")
-            img <- playlist_tracks$track.album.images[[i]][["url"]][1]
-            if(is.null(img)) {
-                img <- ""
-            }
-            data.frame(author = author,
-                       img = img)
-        }) %>% bind_rows()
+        playlist[["all_names"]] <- playlist_info[["name"]]
+        playlist[["all_uris"]] <- playlist_info[["uri"]]
+        playlist[["all_ids"]] <- playlist_info[["id"]]
 
-        playlist[["uri"]] <- playlist[["all_uris"]][playlist[["all_names"]] == input[["playlists"]]]
-        playlist[["image"]] <- get_playlist_cover_image(playlist_id, authorization = token)$url[1]
-        playlist[["owner"]] <- playlist_info$owner$display_name
-
-        tracks_names <- playlist_tracks$track.name
-        playlist[["n_tracks"]] <- length(tracks_names)
-        playlist[["tracks"]] <- data.frame(author = albums_data[["author"]],
-                                           img = albums_data[["img"]],
-                                           title =  tracks_names,
-                                           album = playlist_tracks$track.album.name,
-                                           uris = playlist_tracks$track.uri) %>%
-            slice(sample(1:n())) %>%
-            mutate(id = 1:n())
-
-        playlist[["tracks"]] %>%
-            select(-uris, -img, -id)
+        updateSelectInput(session,
+                          inputId = "playlists",
+                          choices = playlist[["all_names"]],
+                          selected = playlist[["all_names"]][1])
     })
 
-    output[["playlist_image"]] <- renderText({
-        url <- playlist[["image"]]
-        c('<img src="', url, '" width="200">')
+
+    observeEvent(input[["playlist_selection"]], {
+        if(input[["playlist_selection"]] == "Select from my playlists") {
+            show("refresh_playlist")
+            show("playlists")
+            hide("generate")
+            hide("playlist_size")
+        } else {
+            hide("refresh_playlist")
+            hide("playlists")
+            show("generate")
+            show("playlist_size")
+        }
+
+    })
+
+    observeEvent(input[["generate"]], {
+        browser()
+        tracks <- readRDS("./data/tracks_djtm.RDS") %>%
+            sample_n(input[["playlist_size"]]) %>%
+            mutate(id = 1:input[["playlist_size"]])
+        playlist[["tracks"]] <- tracks
+    })
+
+
+    output[["playlist_content"]] <- renderTable({
+
+        if(input[["playlist_selection"]] == "Select from my playlists") {
+
+            playlist[["chosen_id"]] <- playlist[["all_ids"]][playlist[["all_names"]] == input[["playlists"]]]
+            playlist_id <- playlist[["chosen_id"]]
+
+            tryCatch({
+                playlist_info <- get_playlist(playlist_id)
+                playlist_tracks <- get_playlist_tracks(playlist_id)
+                albums <- playlist_tracks$track.artists
+
+                albums_data <- lapply(1:length(albums), function(i) {
+                    author <- paste0(albums[[i]]$name, collapse = ", ")
+                    img <- playlist_tracks$track.album.images[[i]][["url"]][1]
+                    if(is.null(img)) {
+                        img <- ""
+                    }
+                    data.frame(author = author,
+                               img = img)
+                }) %>% bind_rows()
+
+                playlist[["owner"]] <- playlist_info$owner$display_name
+                tracks_names <- playlist_tracks$track.name
+                playlist[["n_tracks"]] <- length(tracks_names)
+                playlist[["playlist_name"]] <- input[["playlists"]]
+                playlist[["tracks"]] <- data.frame(author = albums_data[["author"]],
+                                                   img = albums_data[["img"]],
+                                                   title =  tracks_names,
+                                                   album = playlist_tracks$track.album.name,
+                                                   uris = playlist_tracks$track.uri) %>%
+                    slice(sample(1:n())) %>%
+                    mutate(id = 1:n())
+
+                removeNotification("playlist_error")
+            },
+            error = function(e) {
+                showNotification(id = "playlist_error",
+                                 "Invalid playlist selected. Please, select playlist
+                             created by you or another Spotify user.",
+                                 type = "error",
+                                 closeButton = FALSE,
+                                 duration = NULL)
+                disable("start")
+                return(data.frame())
+            })
+
+        } else {
+
+            tracks <- readRDS("./data/tracks_djtm.RDS") %>%
+                sample_n(input[["playlist_size"]]) %>%
+                mutate(id = 1:input[["playlist_size"]])
+
+            playlist[["tracks"]] <- tracks
+            playlist[["n_tracks"]] <- input[["playlist_size"]]
+            playlist[["playlist_name"]] <- "Generated"
+            playlist[["owner"]] <- "NameThatTune!"
+        }
+        playlist[["tracks"]] %>%
+            select(-uris, -img, -id)
     })
 
 
     observeEvent(input[["start"]], {
 
+        players[["chosen_players"]] <- sapply(1:players[["n_texts"]],
+                                              function(ith_player) {
+                                                  input[[paste0("input_text",
+                                                                ith_player)]]
+                                              })
         tracks_table <- playlist[["tracks"]]
 
         toggle_my_shuffle(state = FALSE,
@@ -199,7 +307,6 @@ server <- function(input, output, session) {
                           selected = "Game")
 
         n_players <- length(players[["chosen_players"]])
-
         grid <- expand.grid(category = c("author", "title", "fun fact"),
                             player = players[["chosen_players"]])
 
@@ -209,9 +316,14 @@ server <- function(input, output, session) {
             mutate(category = grid[["category"]],
                    player = grid[["player"]],
                    score = 0)
+        dev_id <- devices_rv[["info"]] %>%
+            filter(name == input[["devices"]]) %>%
+            pull(id)
+
 
         start_my_playback(uris = tracks_table[["uris"]],
-                          authorization = token)
+                          authorization = token,
+                          device_id = dev_id)
 
         song_index[["i"]] <- 1
     })
@@ -234,24 +346,26 @@ server <- function(input, output, session) {
 
     output[["current_song"]] <- renderText({
 
-        song <- playlist[["tracks"]] %>%
-            filter(id == song_index[["i"]])
+        if(song_index[["i"]] <= playlist[["n_tracks"]]) {
+            song <- playlist[["tracks"]] %>%
+                filter(id == song_index[["i"]])
+            author <- song[["author"]]
+            title <- song[["title"]]
+            album <- song[["album"]]
 
-        author <- paste0(song$author, sep = ", ", collapse = "")
-        title <- song$title
-        album <- song$album
-
-        text <- paste0("Author: ", author, "\n", "\n",
-                       "Song: ", title, "\n", "\n",
-                       "Album: ", album, "\n", "\n",
-                       "Playlist: ", input[["playlists"]], " by ",
-                       playlist[["owner"]], "\n", "\n",
-                       song_index[["i"]], "/", playlist[["n_tracks"]])
-
-        if(song_index[["i"]] > playlist[["n_tracks"]])
+            text <- paste0("Author: ", author, "\n", "\n",
+                           "Song: ", title, "\n", "\n",
+                           "Album: ", album, "\n", "\n",
+                           "Playlist: ", playlist[["playlist_name"]], " by ",
+                           playlist[["owner"]], "\n", "\n",
+                           song_index[["i"]], "/", playlist[["n_tracks"]])
+            text
+        } else {
             text <- "The end. Go check your results in Summary."
-
-        text
+            updateTabsetPanel(session = session,
+                              inputId = "general_tab",
+                              selected = "Summary")
+        }
     })
 
 
@@ -291,34 +405,34 @@ server <- function(input, output, session) {
 
         i <- song_index[["i"]]
 
-        score_title <- as.numeric(players[["chosen_players"]] %in% input[["title_point"]])
-        score_author <- as.numeric(players[["chosen_players"]] %in% input[["author_point"]])
-        score_extra <- as.numeric(players[["chosen_players"]] %in% input[["extra_point"]])
-
-        tmp_scores <- expand_grid(category = c("author", "title", "fun fact"),
-                                  player = players[["chosen_players"]]) %>%
-            cbind(score = c(score_author, score_title, score_extra)) %>%
-            group_by(category) %>%
-            mutate(score = score/sum(score))
-
-        tmp_scores[is.na(tmp_scores)] <- 0
-
-        updateCheckboxGroupInput(session, "author_point",
-                                 choices = players[["chosen_players"]])
-        updateCheckboxGroupInput(session, "title_point",
-                                 choices = players[["chosen_players"]])
-        updateCheckboxGroupInput(session, "extra_point",
-                                 choices = players[["chosen_players"]])
-
         if(i <= playlist[["n_tracks"]]) {
+            score_title <- as.numeric(players[["chosen_players"]] %in% input[["title_point"]])
+            score_author <- as.numeric(players[["chosen_players"]] %in% input[["author_point"]])
+            score_extra <- as.numeric(players[["chosen_players"]] %in% input[["extra_point"]])
+
+            tmp_scores <- expand_grid(category = c("author", "title", "fun fact"),
+                                      player = players[["chosen_players"]]) %>%
+                cbind(score = c(score_author, score_title, score_extra)) %>%
+                group_by(category) %>%
+                mutate(score = score/sum(score))
+
+            tmp_scores[is.na(tmp_scores)] <- 0
+
+            updateCheckboxGroupInput(session, "author_point",
+                                     choices = players[["chosen_players"]])
+            updateCheckboxGroupInput(session, "title_point",
+                                     choices = players[["chosen_players"]])
+            updateCheckboxGroupInput(session, "extra_point",
+                                     choices = players[["chosen_players"]])
+
 
             tbl <- table_of_scores[["table"]]
             tbl[tbl[["id"]] == i, c("category", "player", "score")] <- tmp_scores
             table_of_scores[["table"]] <- tbl
 
             skip_my_playback(authorization = token)
+            song_index[["i"]] <- i + 1
         }
-        song_index[["i"]] <- i + 1
     })
 
 
@@ -365,8 +479,21 @@ server <- function(input, output, session) {
         }
     })
 
+    observeEvent(input[["end_btn"]], {
+        updateTabsetPanel(session = session,
+                          inputId = "general_tab",
+                          selected = "Summary")
+    })
+
 
     ###### SUMMARY #############################################################
+
+    observeEvent(input[["play_again"]], {
+        updateTabsetPanel(session = session,
+                          inputId = "general_tab",
+                          selected = "Players")
+    })
+
 
     output[["overall_results"]] <- renderTable({
         scores <- table_of_scores[["table"]]
@@ -410,7 +537,8 @@ server <- function(input, output, session) {
             geom_line(aes(x = id, y = csum, col = player, group = player)) +
             theme_minimal() +
             xlab("Song") +
-            ylab("Cumulative points")
+            ylab("Cumulative points") +
+            theme(axis.text.x = element_text(angle = 90))
     })
 
     output[["download_scores"]] <-

@@ -1,11 +1,9 @@
 
 
 body {
-    font-family: "Gill Sans", sans-serif;
+    font-family: "Bookman", URW Bookman L, serif;
     color: #2D4751;
 }
-
-
 
 .navbar-default {
     background-color: #faffe8 !important;
@@ -18,25 +16,35 @@ body {
     background-image: none !important;
 }
 
+.navbar-default .navbar-nav>li>a:focus, .navbar-default .navbar-nav>li>a:hover {
+    background-color: #faffe8 !important;
+    color: #777777 !important;
+}
 
 .navbar-default .navbar-brand {
     color: #2D4751;
 }
 
-
 h5 {
     color: black;
 }
 
-
 .shiny-notification {
              position:fixed;
-             top: calc(20%);
-             left: calc(30%);
-             right: calc(10%);
-             font-size: 40px;
+             top: calc(80%);
+             left: calc(0%);
+             right: calc(30%);
+             font-size: 24px;
 }
 
+#end_btn {
+    width:100%;
+    margin-top: 25px;
+}
+
+.navbar-nav {
+  pointer-events: none;
+}
 
 
 
